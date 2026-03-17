@@ -400,7 +400,7 @@ async function addExpense(){
   if(!date){alert('Please select a date.');return;}
   const btn = document.getElementById('add-btn');
   btn.disabled=true; btn.textContent='Saving…';
-  const {error} = await sb.from('expenses').insert({broad,sub,amount,date,desc:desc||sub,added_by:user,is_fixed:false});
+  const {error} = await sb.from('expenses').insert({broad,sub,amount,date,description:desc||sub,added_by:user,is_fixed:false});
   btn.disabled=false; btn.textContent='Add expense';
   if(error){alert('Error saving: '+error.message);return;}
   document.getElementById('f-amount').value='';
@@ -417,9 +417,9 @@ async function deleteExpense(id){
 function getFixedForMonth(y, m){
   const ds = `${y}-${String(m+1).padStart(2,'0')}-01`;
   return [
-    {id:'fix-rent', broad:'Fundamentals', sub:'Rent', amount:1160, date:ds, desc:'Rent', added_by:'auto', is_fixed:true},
-    {id:'fix-ins1', broad:'Fundamentals', sub:'Insurance', amount:993.76, date:ds, desc:'Insurance 1', added_by:'auto', is_fixed:true},
-    {id:'fix-ins2', broad:'Fundamentals', sub:'Insurance', amount:815.99, date:ds, desc:'Insurance 2', added_by:'auto', is_fixed:true}
+    {id:'fix-rent', broad:'Fundamentals', sub:'Rent', amount:1160, date:ds, description:'Rent', added_by:'auto', is_fixed:true},
+    {id:'fix-ins1', broad:'Fundamentals', sub:'Insurance', amount:993.76, date:ds, description:'Insurance 1', added_by:'auto', is_fixed:true},
+    {id:'fix-ins2', broad:'Fundamentals', sub:'Insurance', amount:815.99, date:ds, description:'Insurance 2', added_by:'auto', is_fixed:true}
   ];
 }
 
@@ -445,7 +445,7 @@ function expHTML(e){
   const atag=e.is_fixed?'<span class="auto-tag">auto</span>':'';
   const del=e.is_fixed?'':`<button class="del-btn" onclick="deleteExpense('${e.id}')">✕</button>`;
   const uby=e.is_fixed?'':`<span class="exp-user">by ${e.added_by}</span>`;
-  return `<div class="expense-item">${bpill}${spill}<span class="exp-desc">${e.desc}${atag}</span><div class="exp-right">${uby}<span class="exp-date">${e.date}</span><span class="exp-amt">${fmt(e.amount)}</span>${del}</div></div>`;
+  return `<div class="expense-item">${bpill}${spill}<span class="exp-desc">${e.description||e.sub}${atag}</span><div class="exp-right">${uby}<span class="exp-date">${e.date}</span><span class="exp-amt">${fmt(e.amount)}</span>${del}</div></div>`;
 }
 
 function renderRecent(){
