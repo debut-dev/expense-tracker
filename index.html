@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface2: #f3f2ef;
+    --border: rgba(0,0,0,0.1); --border2: rgba(0,0,0,0.18);
+    --text: #1a1a1a; --text2: #666; --text3: #999;
+    --blue: #378ADD; --amber: #EF9F27; --green: #1D9E75;
+    --red: #D85A30; --red-bg: #FAECE7; --red-text: #993C1D;
+    --warn-bg: #FAEEDA; --warn-text: #854F0B;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* SETUP SCREEN */
+  #setup-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+  .setup-card { background: var(--surface); border-radius: 16px; padding: 2rem; max-width: 460px; width: 100%; border: 1px solid var(--border); }
+  .setup-card h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .setup-card p { font-size: 14px; color: var(--text2); margin-bottom: 1.5rem; line-height: 1.6; }
+  .setup-field { margin-bottom: 1rem; }
+  .setup-field label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+  .setup-field input { width: 100%; padding: 10px 12px; border: 1px solid var(--border2); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); color: var(--text); }
+  .setup-field input:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+  .setup-btn { width: 100%; padding: 11px; background: var(--text); color: white; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 4px; }
+  .setup-btn:hover { opacity: 0.85; }
+  .setup-note { font-size: 12px; color: var(--text3); margin-top: 1rem; line-height: 1.6; }
+  .setup-note a { color: var(--blue); }
+  .setup-error { font-size: 13px; color: var(--red-text); background: var(--red-bg); padding: 8px 12px; border-radius: var(--radius-sm); margin-top: 10px; display: none; }
+
+  /* MAIN APP */
+  #app { display: none; max-width: 820px; margin: 0 auto; padding: 0 0 80px; }
+  .app-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .app-header h1 { font-size: 17px; font-weight: 600; }
+  .header-right { font-size: 13px; color: var(--text2); }
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 16px; position: sticky; top: 53px; z-index: 9; }
+  .tab { padding: 12px 14px; font-size: 14px; cursor: pointer; border: none; background: transparent; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .tab.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
+  .section { display: none; padding: 16px; }
+  .section.active { display: block; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+  .card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+
+  /* FORM */
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 13px; color: var(--text2); }
+  .form-group input, .form-group select { padding: 9px 10px; border: 1px solid var(--border2); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); color: var(--text); font-family: inherit; }
+  .form-group input:focus, .form-group select:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+  .add-btn { width: 100%; padding: 11px; background: var(--text); color: white; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 6px; }
+  .add-btn:hover { opacity: 0.85; }
+  .add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* EXPENSE ITEMS */
+  .expense-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface2); border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 5px; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; font-weight: 500; flex-shrink: 0; }
+  .pill-fund { background: #E6F1FB; color: #185FA5; }
+  .pill-fun  { background: #FAEEDA; color: #854F0B; }
+  .pill-fut  { background: #E1F5EE; color: #0F6E56; }
+  .pill-sub  { background: var(--surface); border: 1px solid var(--border2); color: var(--text2); }
+  .auto-tag  { font-size: 10px; padding: 1px 5px; border-radius: 20px; background: #E1F5EE; color: #0F6E56; margin-left: 3px; flex-shrink: 0; }
+  .exp-desc  { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exp-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .exp-date  { color: var(--text3); font-size: 11px; }
+  .exp-amt   { font-weight: 500; }
+  .exp-user  { font-size: 11px; color: var(--text3); }
+  .del-btn   { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 13px; padding: 0 2px; line-height: 1; }
+  .del-btn:hover { color: var(--red); }
+  .empty { text-align: center; padding: 2.5rem; color: var(--text2); font-size: 14px; }
+  .loading { text-align: center; padding: 2rem; color: var(--text3); font-size: 14px; }
+
+  /* BUDGET */
+  .toggle-row { display: flex; gap: 6px; margin-bottom: 14px; }
+  .toggle-btn { font-size: 13px; padding: 5px 16px; border: 1px solid var(--border2); border-radius: 20px; background: transparent; color: var(--text2); cursor: pointer; }
+  .toggle-btn.active { background: var(--text); color: white; border-color: var(--text); }
+  .broad-card { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; background: var(--surface); }
+  .broad-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; }
+  .broad-header:hover { background: var(--surface2); }
+  .broad-title { font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .broad-meta { font-size: 12px; color: var(--text2); margin-top: 3px; }
+  .broad-right { text-align: right; }
+  .broad-spent { font-size: 15px; font-weight: 500; }
+  .broad-pct { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .prog-track { height: 6px; background: var(--surface2); margin: 0 16px 12px; border-radius: 3px; }
+  .prog-fill { height: 6px; border-radius: 3px; transition: width 0.4s ease; }
+  .sub-list { padding: 0 16px 12px; display: none; }
+  .sub-list.open { display: block; }
+  .sub-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+  .sub-name { font-size: 13px; width: 150px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .sub-bar-wrap { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; }
+  .sub-bar-fill { height: 4px; border-radius: 2px; }
+  .sub-nums { font-size: 12px; color: var(--text2); text-align: right; min-width: 120px; }
+  .sub-nums strong { color: var(--text); }
+  .alert-pill { font-size: 10px; padding: 2px 6px; border-radius: 20px; }
+  .a-warn { background: var(--warn-bg); color: var(--warn-text); }
+  .a-over { background: var(--red-bg); color: var(--red-text); }
+  .income-strip { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
+  .income-bar { display: flex; height: 18px; border-radius: 5px; overflow: hidden; margin: 10px 0 8px; }
+  .income-seg { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: white; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; }
+  .legend-item { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* FILTER */
+  .filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .filter-btn { font-size: 12px; padding: 4px 11px; border: 1px solid var(--border2); border-radius: 20px; background: transparent; color: var(--text2); cursor: pointer; }
+  .filter-btn.active { background: var(--text); color: white; border-color: var(--text); }
+
+  /* SETTINGS */
+  .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 12px; }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-label { font-size: 14px; color: var(--text); }
+  .settings-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
+  .settings-inputs { display: flex; gap: 6px; }
+  .settings-input { padding: 7px 9px; border: 1px solid var(--border2); border-radius: var(--radius-sm); font-size: 13px; width: 95px; text-align: right; background: var(--surface); color: var(--text); }
+  .save-badge { font-size: 11px; color: var(--green); display: none; margin-left: 6px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 500px) {
+    .form-row { grid-template-columns: 1fr; }
+    .metric-grid { grid-template-columns: 1fr 1fr; }
+    .sub-name { width: 110px; }
+    .sub-nums { min-width: 90px; font-size: 11px; }
+    .tab { padding: 10px 10px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <h1>💰 Expense Tracker</h1>
+    <p>Connect to your shared database so both users can see the same expenses in real time. You only need to do this setup once.</p>
+    <div class="setup-field">
+      <label>Supabase Project URL</label>
+      <input type="text" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co">
+    </div>
+    <div class="setup-field">
+      <label>Supabase Anon Key</label>
+      <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+    </div>
+    <button class="setup-btn" onclick="connectSupabase()">Connect & Open Tracker</button>
+    <div class="setup-error" id="setup-error"></div>
+    <div class="setup-note">
+      <strong>How to get these:</strong><br>
+      1. Go to <a href="https://supabase.com" target="_blank">supabase.com</a> → create a free account<br>
+      2. Create a new project (any name, e.g. "my-expenses")<br>
+      3. Go to Project Settings → API<br>
+      4. Copy the <strong>Project URL</strong> and <strong>anon public</strong> key here<br>
+      5. Then run the SQL setup (see instructions below the app)
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="app-header">
+    <h1>💰 Expense Tracker</h1>
+    <div class="header-right" id="sync-status">Syncing…</div>
+  </div>
+  <div class="tab-bar">
+    <button class="tab active" onclick="showTab('add')">Add</button>
+    <button class="tab" onclick="showTab('budget')">Budget</button>
+    <button class="tab" onclick="showTab('history')">History</button>
+    <button class="tab" onclick="showTab('settings')">Settings</button>
+  </div>
+
+  <!-- ADD -->
+  <div class="section active" id="tab-add">
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Broad category</label>
+          <select id="f-broad" onchange="updateSubCats()">
+            <option>Fundamentals</option>
+            <option>Fun</option>
+            <option>Future</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Sub-category</label>
+          <select id="f-sub"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Amount (€)</label>
+          <input type="number" id="f-amount" placeholder="0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="f-date">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Description (optional)</label>
+        <input type="text" id="f-desc" placeholder="e.g. Weekly groceries at Lidl">
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Added by</label>
+        <select id="f-user">
+          <option value="A">User A</option>
+          <option value="B">User B</option>
+        </select>
+      </div>
+      <button class="add-btn" id="add-btn" onclick="addExpense()">Add expense</button>
+    </div>
+    <div class="card-title" style="padding:0 4px;">Recent</div>
+    <div id="recent-list"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- BUDGET -->
+  <div class="section" id="tab-budget">
+    <div class="toggle-row">
+      <button class="toggle-btn active" onclick="setBudgetView('monthly',this)">Monthly</button>
+      <button class="toggle-btn" onclick="setBudgetView('annual',this)">Annual</button>
+    </div>
+    <div class="income-strip">
+      <div class="card-title" style="margin-bottom:4px;">Annual income allocation — €120,000</div>
+      <div class="income-bar">
+        <div class="income-seg" style="width:45%;background:#378ADD;">45%</div>
+        <div class="income-seg" style="width:20%;background:#EF9F27;">20%</div>
+        <div class="income-seg" style="width:35%;background:#1D9E75;">35%</div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#378ADD;"></div>Fundamentals — €54k</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div>Fun — €24k</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1D9E75;"></div>Future — €42k</div>
+      </div>
+    </div>
+    <div id="budget-cards"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="section" id="tab-history">
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="setHFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setHFilter('Fundamentals',this)">Fundamentals</button>
+      <button class="filter-btn" onclick="setHFilter('Fun',this)">Fun</button>
+      <button class="filter-btn" onclick="setHFilter('Future',this)">Future</button>
+    </div>
+    <div id="history-list"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="section" id="tab-settings">
+    <div class="card">
+      <div class="card-title">Sub-category monthly budgets</div>
+      <div id="settings-subs"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Broad category budgets</div>
+      <div id="settings-broads"></div>
+    </div>
+    <div class="card" style="background:#f9f8f6;">
+      <div class="card-title">Connected database</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;" id="db-info"></div>
+      <button onclick="disconnect()" style="font-size:13px;color:var(--red-text);background:none;border:none;cursor:pointer;padding:0;">Disconnect & reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STRUCTURE = {
+  Fundamentals: ['Groceries','Utilities','Rent','Insurance','Shopping'],
+  Fun: ['Eating out','Entertainment','Travel & Trips'],
+  Future: ['Investments','Savings']
+};
+const FIXED_SUBS = ['Rent','Insurance'];
+const BROAD_COLORS = {Fundamentals:'#378ADD', Fun:'#EF9F27', Future:'#1D9E75'};
+const BROAD_PILLS = {Fundamentals:'pill-fund', Fun:'pill-fun', Future:'pill-fut'};
+
+const DEFAULT_SUB_BUDGETS = {
+  Groceries:500, Utilities:0, Rent:1160, Insurance:1809.75, Shopping:0,
+  'Eating out':0, Entertainment:0, 'Travel & Trips':0,
+  Investments:1000, Savings:2500
+};
+const DEFAULT_BROAD = {
+  monthly:{Fundamentals:4500, Fun:2000, Future:3500},
+  annual:{Fundamentals:54000, Fun:24000, Future:42000}
+};
+
+let sb = null;
+let expenses = [];
+let budgetView = 'monthly';
+let hFilter = 'all';
+let settings = null;
+let realtimeSub = null;
+
+function fmt(n){ return '€'+parseFloat(n||0).toFixed(2); }
+function fmtK(n){ return n>=1000?'€'+(n/1000).toFixed(1)+'k':fmt(n); }
+function today(){ return new Date().toISOString().split('T')[0]; }
+
+// ---- SETUP ----
+window.onload = () => {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if(url && key) initApp(url, key);
+};
+
+async function connectSupabase(){
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  const err = document.getElementById('setup-error');
+  err.style.display='none';
+  if(!url || !key){ err.textContent='Please enter both fields.'; err.style.display='block'; return; }
+  try {
+    sb = supabase.createClient(url, key);
+    const {error} = await sb.from('expenses').select('id').limit(1);
+    if(error) throw new Error(error.message);
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    initApp(url, key);
+  } catch(e){
+    err.textContent = 'Could not connect: '+e.message+'. Make sure you ran the SQL setup and the URL/key are correct.';
+    err.style.display='block';
+  }
+}
+
+async function initApp(url, key){
+  if(!sb) sb = supabase.createClient(url, key);
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('db-info').textContent = url;
+  updateSubCats();
+  document.getElementById('f-date').value = today();
+  await loadSettings();
+  await loadExpenses();
+  subscribeRealtime();
+}
+
+function disconnect(){
+  if(!confirm('This will disconnect the database. Your data stays safe in Supabase. Continue?')) return;
+  localStorage.removeItem('sb_url');
+  localStorage.removeItem('sb_key');
+  if(realtimeSub) sb.removeChannel(realtimeSub);
+  sb = null; expenses = [];
+  document.getElementById('setup-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+}
+
+// ---- DATA ----
+async function loadSettings(){
+  const {data} = await sb.from('settings').select('*');
+  if(data && data.length){
+    const map = {};
+    data.forEach(r => map[r.key] = r.value);
+    settings = {
+      subBudgets: map.subBudgets ? JSON.parse(map.subBudgets) : {...DEFAULT_SUB_BUDGETS},
+      broadBudgets: map.broadBudgets ? JSON.parse(map.broadBudgets) : JSON.parse(JSON.stringify(DEFAULT_BROAD))
+    };
+  } else {
+    settings = { subBudgets:{...DEFAULT_SUB_BUDGETS}, broadBudgets:JSON.parse(JSON.stringify(DEFAULT_BROAD)) };
+  }
+  renderSettings();
+}
+
+async function saveSetting(key, value){
+  await sb.from('settings').upsert({key, value: JSON.stringify(value)}, {onConflict:'key'});
+}
+
+async function loadExpenses(){
+  setStatus('Syncing…');
+  const {data, error} = await sb.from('expenses').select('*').order('date', {ascending:false}).order('created_at', {ascending:false});
+  if(error){ setStatus('Error loading'); return; }
+  expenses = data || [];
+  setStatus('Live ✓');
+  renderAll();
+}
+
+function subscribeRealtime(){
+  realtimeSub = sb.channel('exp-changes')
+    .on('postgres_changes',{event:'*',schema:'public',table:'expenses'}, ()=>{ loadExpenses(); })
+    .subscribe();
+}
+
+function setStatus(s){ document.getElementById('sync-status').textContent = s; }
+
+// ---- ADD ----
+function updateSubCats(){
+  const broad = document.getElementById('f-broad').value;
+  const sel = document.getElementById('f-sub');
+  sel.innerHTML = STRUCTURE[broad].filter(s=>!FIXED_SUBS.includes(s)).map(s=>`<option>${s}</option>`).join('');
+}
+
+async function addExpense(){
+  const broad = document.getElementById('f-broad').value;
+  const sub = document.getElementById('f-sub').value;
+  const amount = parseFloat(document.getElementById('f-amount').value);
+  const date = document.getElementById('f-date').value;
+  const desc = document.getElementById('f-desc').value.trim();
+  const user = document.getElementById('f-user').value;
+  if(!amount||amount<=0){alert('Please enter a valid amount.');return;}
+  if(!date){alert('Please select a date.');return;}
+  const btn = document.getElementById('add-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  const {error} = await sb.from('expenses').insert({broad,sub,amount,date,desc:desc||sub,added_by:user,is_fixed:false});
+  btn.disabled=false; btn.textContent='Add expense';
+  if(error){alert('Error saving: '+error.message);return;}
+  document.getElementById('f-amount').value='';
+  document.getElementById('f-desc').value='';
+  document.getElementById('f-date').value=today();
+}
+
+async function deleteExpense(id){
+  if(!confirm('Delete this expense?')) return;
+  await sb.from('expenses').delete().eq('id',id);
+}
+
+// ---- FIXED AUTO EXPENSES ----
+function getFixedForMonth(y, m){
+  const ds = `${y}-${String(m+1).padStart(2,'0')}-01`;
+  return [
+    {id:'fix-rent', broad:'Fundamentals', sub:'Rent', amount:1160, date:ds, desc:'Rent', added_by:'auto', is_fixed:true},
+    {id:'fix-ins1', broad:'Fundamentals', sub:'Insurance', amount:993.76, date:ds, desc:'Insurance 1', added_by:'auto', is_fixed:true},
+    {id:'fix-ins2', broad:'Fundamentals', sub:'Insurance', amount:815.99, date:ds, desc:'Insurance 2', added_by:'auto', is_fixed:true}
+  ];
+}
+
+function getMonthExp(y, m, includeFixed=true){
+  const user = expenses.filter(e=>{
+    const d=new Date(e.date); return d.getFullYear()===y && d.getMonth()===m;
+  });
+  return includeFixed ? [...getFixedForMonth(y,m), ...user] : user;
+}
+
+function getYearExp(y, includeFixed=true){
+  const user = expenses.filter(e=>new Date(e.date).getFullYear()===y);
+  if(!includeFixed) return user;
+  const fixed = [];
+  for(let m=0;m<12;m++) fixed.push(...getFixedForMonth(y,m));
+  return [...fixed, ...user];
+}
+
+// ---- RENDER HELPERS ----
+function expHTML(e){
+  const bpill=`<span class="pill ${BROAD_PILLS[e.broad]}">${e.broad}</span>`;
+  const spill=`<span class="pill pill-sub">${e.sub}</span>`;
+  const atag=e.is_fixed?'<span class="auto-tag">auto</span>':'';
+  const del=e.is_fixed?'':`<button class="del-btn" onclick="deleteExpense('${e.id}')">✕</button>`;
+  const uby=e.is_fixed?'':`<span class="exp-user">by ${e.added_by}</span>`;
+  return `<div class="expense-item">${bpill}${spill}<span class="exp-desc">${e.desc}${atag}</span><div class="exp-right">${uby}<span class="exp-date">${e.date}</span><span class="exp-amt">${fmt(e.amount)}</span>${del}</div></div>`;
+}
+
+function renderRecent(){
+  const now=new Date(); const y=now.getFullYear(),m=now.getMonth();
+  const all=[...getFixedForMonth(y,m),...expenses.slice(0,6)];
+  const el=document.getElementById('recent-list');
+  el.innerHTML=all.length?all.map(expHTML).join(''):'<div class="empty">No expenses yet. Add your first one!</div>';
+}
+
+function setHFilter(f,el){
+  hFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderHistory();
+}
+
+function renderHistory(){
+  const now=new Date(); const y=now.getFullYear(),m=now.getMonth();
+  let all=[...getFixedForMonth(y,m),...expenses];
+  if(hFilter!=='all') all=all.filter(e=>e.broad===hFilter);
+  const el=document.getElementById('history-list');
+  el.innerHTML=all.length?all.map(expHTML).join(''):'<div class="empty">No expenses found.</div>';
+}
+
+function setBudgetView(v,el){
+  budgetView=v;
+  document.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderBudget();
+}
+
+function renderBudget(){
+  const now=new Date(); const y=now.getFullYear(),m=now.getMonth();
+  const allExp = budgetView==='monthly' ? getMonthExp(y,m) : getYearExp(y);
+  let html='';
+  Object.keys(STRUCTURE).forEach(broad=>{
+    const budgetTotal = budgetView==='monthly'
+      ? settings.broadBudgets.monthly[broad]
+      : settings.broadBudgets.annual[broad];
+    const spent=allExp.filter(e=>e.broad===broad).reduce((s,e)=>s+e.amount,0);
+    const pct=budgetTotal>0?Math.min(spent/budgetTotal*100,100):0;
+    const over=budgetTotal>0&&spent>budgetTotal;
+    const warn=budgetTotal>0&&!over&&spent/budgetTotal>=0.8;
+    const barColor=over?'#D85A30':warn?'#EF9F27':BROAD_COLORS[broad];
+    const alertHtml=over?'<span class="alert-pill a-over">over budget</span>':warn?'<span class="alert-pill a-warn">80% reached</span>':'';
+    const remaining=budgetTotal-spent;
+    const remText=remaining>=0?`€${Math.abs(remaining).toFixed(0)} left`:`€${Math.abs(remaining).toFixed(0)} over`;
+    let subsHtml='';
+    STRUCTURE[broad].forEach(sub=>{
+      const subBudgetM=settings.subBudgets[sub]||0;
+      const subBudget=budgetView==='annual'?subBudgetM*12:subBudgetM;
+      const subSpent=allExp.filter(e=>e.sub===sub).reduce((s,e)=>s+e.amount,0);
+      const isFixed=FIXED_SUBS.includes(sub);
+      const sp=subBudget>0?Math.min(subSpent/subBudget*100,100):0;
+      const sOver=subBudget>0&&subSpent>subBudget;
+      const sWarn=subBudget>0&&!sOver&&subSpent/subBudget>=0.8;
+      const sColor=sOver?'#D85A30':sWarn?'#EF9F27':BROAD_COLORS[broad];
+      const sAlert=sOver?'<span class="alert-pill a-over">over</span>':sWarn?'<span class="alert-pill a-warn">80%</span>':'';
+      const ftag=isFixed?'<span class="auto-tag">auto</span>':'';
+      subsHtml+=`<div class="sub-row">
+        <div class="sub-name">${sub}${ftag}${sAlert}</div>
+        <div class="sub-bar-wrap"><div class="sub-bar-fill" style="width:${sp}%;background:${sColor};"></div></div>
+        <div class="sub-nums"><strong>${fmt(subSpent)}</strong> / ${subBudget>0?fmt(subBudget):'—'}</div>
+      </div>`;
+    });
+    html+=`<div class="broad-card">
+      <div class="broad-header" onclick="toggleSubs('sl-${broad}')">
+        <div>
+          <div class="broad-title">${broad} ${alertHtml}</div>
+          <div class="broad-meta">${budgetView} · ${remText}</div>
+        </div>
+        <div class="broad-right">
+          <div class="broad-spent" style="color:${over?'#D85A30':warn?'#BA7517':BROAD_COLORS[broad]}">${fmt(spent)}</div>
+          <div class="broad-pct">${pct.toFixed(0)}% of ${fmtK(budgetTotal)}</div>
+        </div>
+      </div>
+      <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${barColor};"></div></div>
+      <div class="sub-list" id="sl-${broad}">${subsHtml}</div>
+    </div>`;
+  });
+  document.getElementById('budget-cards').innerHTML=html;
+}
+
+function toggleSubs(id){
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+
+function renderSettings(){
+  if(!settings) return;
+  let subHtml='';
+  Object.keys(STRUCTURE).forEach(broad=>{
+    STRUCTURE[broad].forEach(sub=>{
+      const isFixed=FIXED_SUBS.includes(sub);
+      subHtml+=`<div class="settings-row">
+        <div>
+          <div class="settings-label">${sub} ${isFixed?'<span class="auto-tag">auto</span>':''}</div>
+          <div class="settings-sub">${broad} · monthly</div>
+        </div>
+        <input class="settings-input" type="number" value="${(settings.subBudgets[sub]||0).toFixed(2)}" onchange="updateSubBudget('${sub}',this.value)"/>
+      </div>`;
+    });
+  });
+  document.getElementById('settings-subs').innerHTML=subHtml;
+
+  let broadHtml='';
+  ['Fundamentals','Fun','Future'].forEach(b=>{
+    broadHtml+=`<div class="settings-row">
+      <div>
+        <div class="settings-label">${b}</div>
+        <div class="settings-sub">Monthly / Annual</div>
+      </div>
+      <div class="settings-inputs">
+        <input class="settings-input" type="number" value="${settings.broadBudgets.monthly[b].toFixed(2)}" onchange="updateBroadBudget('${b}','monthly',this.value)" placeholder="Monthly"/>
+        <input class="settings-input" type="number" value="${settings.broadBudgets.annual[b].toFixed(2)}" onchange="updateBroadBudget('${b}','annual',this.value)" placeholder="Annual"/>
+      </div>
+    </div>`;
+  });
+  document.getElementById('settings-broads').innerHTML=broadHtml;
+}
+
+async function updateSubBudget(sub,val){
+  settings.subBudgets[sub]=parseFloat(val)||0;
+  await saveSetting('subBudgets', settings.subBudgets);
+  renderBudget();
+}
+
+async function updateBroadBudget(broad,period,val){
+  settings.broadBudgets[period][broad]=parseFloat(val)||0;
+  await saveSetting('broadBudgets', settings.broadBudgets);
+  renderBudget();
+}
+
+function renderAll(){
+  renderRecent();
+  renderHistory();
+  renderBudget();
+  renderSettings();
+}
+
+function showTab(name){
+  ['add','budget','history','settings'].forEach((n,i)=>{
+    document.querySelectorAll('.tab')[i].classList.toggle('active',n===name);
+    document.getElementById('tab-'+n).classList.toggle('active',n===name);
+  });
+  if(name==='budget') renderBudget();
+  if(name==='history') renderHistory();
+  if(name==='settings') renderSettings();
+}
+</script>
+
+<!-- SQL SETUP INSTRUCTIONS (visible in source, not on screen) -->
+<!--
+=== SUPABASE SQL SETUP ===
+Run this SQL in your Supabase project → SQL Editor → New Query:
+
+create table expenses (
+  id uuid default gen_random_uuid() primary key,
+  broad text not null,
+  sub text not null,
+  amount numeric not null,
+  date date not null,
+  desc text,
+  added_by text,
+  is_fixed boolean default false,
+  created_at timestamptz default now()
+);
+
+create table settings (
+  key text primary key,
+  value text
+);
+
+alter table expenses enable row level security;
+alter table settings enable row level security;
+
+create policy "allow all" on expenses for all using (true) with check (true);
+create policy "allow all" on settings for all using (true) with check (true);
+-->
+
+</body>
+</html>
