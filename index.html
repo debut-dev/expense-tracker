@@ -6,6 +6,7 @@
 <title>Expense Tracker</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -165,6 +166,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .s-input{padding:8px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;width:85px;text-align:right;background:var(--surface);color:var(--text);}
 .empty{text-align:center;padding:2.5rem 1rem;color:var(--text2);font-size:14px;}
 .loading-msg{text-align:center;padding:2rem;color:var(--text3);font-size:14px;}
+.imp-table th{background:var(--surface2);padding:7px 8px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap;border-bottom:1px solid var(--border);}
+.imp-table td{padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.imp-table tr:last-child td{border-bottom:none;}
+.map-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);gap:8px;}
+.map-row:last-child{border-bottom:none;}
+.map-label{font-size:13px;color:var(--text);flex:1;}
+.map-select{padding:7px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text);min-width:130px;}
+.stat-pill{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;margin-right:6px;margin-bottom:6px;}
+.dot-good{background:var(--green-bg);color:var(--green-text);}
+.dot-warn{background:var(--amber-bg);color:var(--amber-text);}
+.dot-skip{background:var(--surface2);color:var(--text2);}
 </style>
 </head>
 <body>
@@ -348,11 +360,77 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 
+  <!-- IMPORT -->
+  <div class="section" id="tab-import">
+    <div style="height:8px;"></div>
+
+    <!-- Step 1: Upload -->
+    <div id="imp-step1">
+      <div class="card">
+        <div class="card-title">Step 1 — Upload your Excel file</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Your Excel should have columns for Date, Amount, Category and Description. Any column order is fine — you'll map them in the next step.</p>
+        <label style="display:block;border:2px dashed var(--border2);border-radius:var(--radius);padding:2rem;text-align:center;cursor:pointer;" id="drop-zone">
+          <div style="font-size:32px;margin-bottom:8px;">📂</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:4px;">Tap to choose file</div>
+          <div style="font-size:12px;color:var(--text2);">.xlsx or .csv files supported</div>
+          <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleFile(this)">
+        </label>
+        <div id="imp-file-name" style="font-size:13px;color:var(--green-text);margin-top:10px;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Map columns -->
+    <div id="imp-step2" style="display:none;">
+      <div class="card">
+        <div class="card-title">Step 2 — Match your columns</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">We found these columns in your file. Match each one to what it represents.</p>
+        <div id="col-mapping"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Step 3 — Map your categories</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">Match each category from your file to one in the app. Any unmapped categories will be marked as "Other".</p>
+        <div id="cat-mapping"></div>
+      </div>
+      <button class="add-btn" onclick="previewData()">Preview import →</button>
+    </div>
+
+    <!-- Step 3: Preview -->
+    <div id="imp-step3" style="display:none;">
+      <div class="card">
+        <div class="card-title">Step 4 — Review before importing</div>
+        <div id="imp-preview-stats" style="margin-bottom:12px;"></div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+          <table id="imp-preview-table" style="width:100%;border-collapse:collapse;font-size:12px;"></table>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button onclick="resetImport()" style="flex:1;padding:13px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:14px;cursor:pointer;color:var(--text2);">← Start over</button>
+        <button class="add-btn" style="flex:2;margin-top:0;" id="imp-confirm-btn" onclick="confirmImport()">Import all entries</button>
+      </div>
+      <div id="imp-progress" style="display:none;" class="card">
+        <div class="card-title">Importing…</div>
+        <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-bottom:8px;"><div id="imp-prog-fill" style="height:8px;background:var(--blue);border-radius:4px;width:0%;transition:width 0.3s;"></div></div>
+        <div id="imp-prog-label" style="font-size:13px;color:var(--text2);"></div>
+      </div>
+    </div>
+
+    <!-- Done -->
+    <div id="imp-done" style="display:none;">
+      <div class="card" style="text-align:center;padding:2rem;">
+        <div style="font-size:40px;margin-bottom:12px;">✅</div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:6px;">Import complete!</div>
+        <div id="imp-done-msg" style="font-size:14px;color:var(--text2);margin-bottom:20px;"></div>
+        <button class="add-btn" onclick="resetImport()">Import another file</button>
+      </div>
+    </div>
+  </div>
+
   <div class="bottom-nav">
     <button class="nav-btn active" id="nav-add" onclick="showTab('add')"><div class="nav-icon">＋</div><div>Add</div></button>
     <button class="nav-btn" id="nav-budget" onclick="showTab('budget')"><div class="nav-icon">📊</div><div>Budget</div></button>
     <button class="nav-btn" id="nav-analytics" onclick="showTab('analytics')"><div class="nav-icon">📈</div><div>Analytics</div></button>
     <button class="nav-btn" id="nav-history" onclick="showTab('history')"><div class="nav-icon">🕐</div><div>History</div></button>
+    <button class="nav-btn" id="nav-import" onclick="showTab('import')"><div class="nav-icon">📥</div><div>Import</div></button>
     <button class="nav-btn" id="nav-settings" onclick="showTab('settings')"><div class="nav-icon">⚙️</div><div>Settings</div></button>
   </div>
 </div>
@@ -528,8 +606,212 @@ async function uBroad(b,p,v){cfg.broadBudgets[p][b]=parseFloat(v)||0;await saveC
 
 function renderAll(){renderRepeat();renderRunning();renderHistory();renderBudget();renderSettings();}
 
-function showTab(name){
-  ['add','budget','analytics','history','settings'].forEach(n=>{document.getElementById('tab-'+n).classList.toggle('active',n===name);document.getElementById('nav-'+n).classList.toggle('active',n===name);});
+
+// ---- IMPORT ----
+let impRows=[];let impColMap={};let impCatMap={};let impFileData=null;
+
+// All known sub-categories flat list for mapping
+const ALL_SUBS=Object.values(STR).flat().filter(s=>!FIXED.includes(s));
+const ALL_BROAD_FOR_SUB={};Object.keys(STR).forEach(b=>STR[b].forEach(s=>ALL_BROAD_FOR_SUB[s]=b));
+
+async function handleFile(input){
+  const file=input.files[0];if(!file)return;
+  document.getElementById('imp-file-name').style.display='block';
+  document.getElementById('imp-file-name').textContent='📄 '+file.name+' — reading…';
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    const text=await file.text();
+    impFileData=parseCSV(text);
+  } else {
+    const buf=await file.arrayBuffer();
+    impFileData=parseXLSX(buf);
+  }
+  if(!impFileData||!impFileData.headers.length){alert('Could not read file. Please check it has headers in the first row.');return;}
+  document.getElementById('imp-file-name').textContent='✅ '+file.name+' — '+impFileData.rows.length+' rows found';
+  renderColMapping();
+  document.getElementById('imp-step2').style.display='block';
+}
+
+function parseCSV(text){
+  const lines=text.trim().split('\n');
+  if(!lines.length)return null;
+  const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+  const rows=lines.slice(1).map(l=>{
+    const vals=[];let cur='',inQ=false;
+    for(let c of l){if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){vals.push(cur.trim());cur='';}else{cur+=c;}}
+    vals.push(cur.trim());
+    const obj={};headers.forEach((h,i)=>obj[h]=vals[i]||'');return obj;
+  }).filter(r=>Object.values(r).some(v=>v));
+  return{headers,rows};
+}
+
+function parseXLSX(buf){
+  // Simple XLSX parser — reads first sheet
+  try{
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    if(!data.length)return null;
+    const headers=data[0].map(h=>String(h).trim());
+    const rows=data.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>{const obj={};headers.forEach((h,i)=>obj[h]=r[i]!==undefined?String(r[i]).trim():'');return obj;});
+    return{headers,rows};
+  }catch(e){return null;}
+}
+
+function renderColMapping(){
+  const headers=impFileData.headers;
+  const fields=['date','amount','category','description'];
+  const labels={date:'Date',amount:'Amount (€)',category:'Category',description:'Description'};
+  // auto-guess mappings
+  const guess={};
+  headers.forEach(h=>{
+    const hl=h.toLowerCase();
+    if(hl.includes('date'))guess.date=h;
+    else if(hl.includes('amount')||hl.includes('value')||hl.includes('sum')||hl.includes('price'))guess.amount=h;
+    else if(hl.includes('cat')||hl.includes('type')||hl.includes('group'))guess.category=h;
+    else if(hl.includes('desc')||hl.includes('note')||hl.includes('detail')||hl.includes('memo'))guess.description=h;
+  });
+  let html='';
+  fields.forEach(field=>{
+    html+=`<div class="map-row"><div class="map-label">${labels[field]}</div>
+    <select class="map-select" id="cm-${field}">
+      <option value="">— skip —</option>
+      ${headers.map(h=>`<option value="${h}" ${guess[field]===h?'selected':''}>${h}</option>`).join('')}
+    </select></div>`;
+  });
+  document.getElementById('col-mapping').innerHTML=html;
+  // After col mapping render, extract unique categories
+  setTimeout(renderCatMapping,100);
+}
+
+function renderCatMapping(){
+  const catCol=document.getElementById('cm-category')?.value;
+  if(!catCol){document.getElementById('cat-mapping').innerHTML='<div style="font-size:13px;color:var(--text2);">Map the Category column above first.</div>';return;}
+  const uniqueCats=[...new Set(impFileData.rows.map(r=>r[catCol]).filter(Boolean))];
+  const allOptions=[...ALL_SUBS,'— skip this category —'];
+  let html='';
+  uniqueCats.forEach(cat=>{
+    // try to auto-match
+    const bestMatch=ALL_SUBS.find(s=>s.toLowerCase()===cat.toLowerCase())||ALL_SUBS.find(s=>cat.toLowerCase().includes(s.toLowerCase().split(' ')[0]))||'';
+    html+=`<div class="map-row">
+      <div class="map-label" style="font-size:12px;">"${cat}"</div>
+      <select class="map-select" id="catm-${encodeURIComponent(cat)}">
+        ${allOptions.map(o=>`<option value="${o}" ${o===bestMatch?'selected':''}>${o}</option>`).join('')}
+      </select></div>`;
+  });
+  document.getElementById('cat-mapping').innerHTML=html||'<div style="font-size:13px;color:var(--text2);">No categories found in file.</div>';
+}
+
+function previewData(){
+  // Read column mappings
+  const dateCol=document.getElementById('cm-date')?.value;
+  const amtCol=document.getElementById('cm-amount')?.value;
+  const catCol=document.getElementById('cm-category')?.value;
+  const descCol=document.getElementById('cm-description')?.value;
+  if(!dateCol||!amtCol){alert('Please map at least the Date and Amount columns.');return;}
+
+  // Read category mappings
+  const catCol2=document.getElementById('cm-category')?.value;
+  const uniqueCats=catCol2?[...new Set(impFileData.rows.map(r=>r[catCol2]).filter(Boolean))]:[];
+  const catMap={};
+  uniqueCats.forEach(cat=>{
+    const el=document.getElementById('catm-'+encodeURIComponent(cat));
+    catMap[cat]=el?el.value:'';
+  });
+  impCatMap=catMap;
+
+  // Build preview rows
+  impRows=[];
+  impFileData.rows.forEach(r=>{
+    const rawDate=r[dateCol]||'';
+    const rawAmt=r[amtCol]||'';
+    const rawCat=catCol?r[catCol]||'':'';
+    const rawDesc=descCol?r[descCol]||'':'';
+    const amount=parseFloat(String(rawAmt).replace(/[^0-9.\-]/g,''));
+    if(!rawDate||isNaN(amount)||amount<=0)return;
+    // parse date
+    let date=parseDate(rawDate);
+    if(!date)return;
+    // map category
+    const mappedSub=catMap[rawCat]||'Groceries';
+    if(mappedSub==='— skip this category —')return;
+    const broad=ALL_BROAD_FOR_SUB[mappedSub]||'Fundamentals';
+    impRows.push({date,amount,sub:mappedSub,broad,description:rawDesc||mappedSub,added_by:'import',is_fixed:false});
+  });
+
+  if(!impRows.length){alert('No valid rows found after mapping. Check your column mapping and date format.');return;}
+
+  // Stats
+  const skipped=impFileData.rows.length-impRows.length;
+  document.getElementById('imp-preview-stats').innerHTML=`
+    <span class="stat-pill dot-good">✓ ${impRows.length} rows ready to import</span>
+    ${skipped?`<span class="stat-pill dot-skip">${skipped} rows skipped (invalid/missing data)</span>`:''}`;
+
+  // Preview table (first 20 rows)
+  const preview=impRows.slice(0,20);
+  let thtml=`<table class="imp-table" style="width:100%;border-collapse:collapse;"><thead><tr><th>Date</th><th>Amount</th><th>Category</th><th>Description</th></tr></thead><tbody>`;
+  preview.forEach(r=>{thtml+=`<tr><td>${r.date}</td><td>${f(r.amount)}</td><td>${r.broad} › ${r.sub}</td><td>${r.description}</td></tr>`;});
+  if(impRows.length>20)thtml+=`<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:8px;">… and ${impRows.length-20} more rows</td></tr>`;
+  thtml+='</tbody></table>';
+  document.getElementById('imp-preview-table').outerHTML=thtml;
+
+  document.getElementById('imp-step2').style.display='none';
+  document.getElementById('imp-step3').style.display='block';
+}
+
+function parseDate(raw){
+  if(!raw)return null;
+  const s=String(raw).trim();
+  // Try ISO
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  // Try DD/MM/YYYY or DD-MM-YYYY
+  const dmy=s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if(dmy)return`${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+  // Try MM/DD/YYYY
+  const mdy=s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if(mdy){const yr=mdy[3].length===2?'20'+mdy[3]:mdy[3];return`${yr}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`;}
+  // Try Excel serial date number
+  const num=parseFloat(s);
+  if(!isNaN(num)&&num>40000){const d=new Date((num-25569)*86400*1000);return d.toISOString().split('T')[0];}
+  // Try natural date string
+  const d=new Date(s);if(!isNaN(d))return d.toISOString().split('T')[0];
+  return null;
+}
+
+async function confirmImport(){
+  if(!impRows.length)return;
+  const btn=document.getElementById('imp-confirm-btn');
+  btn.disabled=true;btn.textContent='Importing…';
+  document.getElementById('imp-progress').style.display='block';
+  const fill=document.getElementById('imp-prog-fill');
+  const label=document.getElementById('imp-prog-label');
+  const batchSize=50;let done=0;
+  for(let i=0;i<impRows.length;i+=batchSize){
+    const batch=impRows.slice(i,i+batchSize);
+    const{error}=await sb.from('expenses').insert(batch);
+    if(error){alert('Error during import: '+error.message);btn.disabled=false;btn.textContent='Import all entries';return;}
+    done+=batch.length;
+    const pct=Math.round(done/impRows.length*100);
+    fill.style.width=pct+'%';
+    label.textContent=`${done} of ${impRows.length} entries saved…`;
+  }
+  await loadExps();
+  document.getElementById('imp-step3').style.display='none';
+  document.getElementById('imp-done').style.display='block';
+  document.getElementById('imp-done-msg').textContent=`${impRows.length} expenses successfully imported into your tracker.`;
+}
+
+function resetImport(){
+  impRows=[];impColMap={};impCatMap={};impFileData=null;
+  document.getElementById('imp-step1').style.display='block';
+  document.getElementById('imp-step2').style.display='none';
+  document.getElementById('imp-step3').style.display='none';
+  document.getElementById('imp-done').style.display='none';
+  document.getElementById('imp-file-name').style.display='none';
+  document.getElementById('imp-file').value='';
+}
+
+  ['add','budget','analytics','history','import','settings'].forEach(n=>{document.getElementById('tab-'+n).classList.toggle('active',n===name);document.getElementById('nav-'+n).classList.toggle('active',n===name);});
   if(name==='analytics')renderAnalytics();
   if(name==='budget')renderBudget();
   if(name==='history')renderHistory();
