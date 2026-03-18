@@ -811,6 +811,7 @@ function resetImport(){
   document.getElementById('imp-file').value='';
 }
 
+function showTab(name){
   ['add','budget','analytics','history','import','settings'].forEach(n=>{document.getElementById('tab-'+n).classList.toggle('active',n===name);document.getElementById('nav-'+n).classList.toggle('active',n===name);});
   if(name==='analytics')renderAnalytics();
   if(name==='budget')renderBudget();
